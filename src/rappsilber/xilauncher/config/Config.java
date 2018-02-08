@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -32,7 +31,131 @@ import java.util.regex.Matcher;
  */
 public class Config {
 
+    public class JarDefinition {
+        static final String DEFAULT_EXTENSION  = ".jar";
+        String baseName;
+        String extension;
+        String Version;
+        String path;
+
+        public JarDefinition(String path, String baseName) {
+            this(path,baseName, DEFAULT_EXTENSION, null);
+        }
+
+        public JarDefinition(String path, String baseName, String extension) {
+            this(path, baseName, extension, null);
+        }
+
+        public JarDefinition(String path, String baseName, String extension, String Version) {
+            if (path.endsWith(File.separator))
+                path=path.substring(0,path.length()-1);
+            this.path = path;
+            this.baseName = baseName;
+            if (extension.length()>0 && !extension.startsWith("."))
+                this.extension = "." + extension;
+            else
+                this.extension = extension;
+            this.Version = Version;
+        }
+
+        /**
+         * turn the information into a absolute path
+         * @return 
+         */
+        public String getFile() {
+            String concPath = path + File.separator + baseName + (Version == null ? "":Version) + extension;
+            File f = new File(concPath);
+            if (f.exists()) {
+                return f.getAbsolutePath();
+            }
+            if (!concPath.startsWith(File.separator)) {
+                f = new File(File.separator+concPath);
+                if (f.exists()) {
+                    return f.getAbsolutePath();
+                }
+            }
+
+            concPath = path + File.separator + baseName +"_" + (Version == null ? "":Version) + extension;
+            f = new File(concPath);
+            if (f.exists()) {
+                return f.getAbsolutePath();
+            }
+            if (!concPath.startsWith(File.separator)) {
+                f = new File(File.separator+concPath);
+                if (f.exists()) {
+                    return f.getAbsolutePath();
+                }
+            }
+
+            return null;
+        }
+
+
+
+        /**
+         * turn the information into a absolute path
+         * @return 
+         */
+        public String getFile(ArrayList<String> basePath) {
+            String concPath = path + File.separator + baseName + (Version == null ? "":Version) + extension;
+            File f = new File(concPath);
+            if (f.exists()) {
+                return f.getAbsolutePath();
+            }
+            if (concPath.startsWith(File.separator))
+                concPath=concPath.substring(1);
+
+            for (String base : basePath) {
+                f = new File(base+File.separator+concPath);
+                if (f.exists()) {
+                    return f.getAbsolutePath();
+                }
+
+            }
+            concPath = path + File.separator + baseName +"_"+ (Version == null ? "":Version) + extension;
+            f = new File(concPath);
+            if (f.exists()) {
+                return f.getAbsolutePath();
+            }
+            if (concPath.startsWith(File.separator))
+                concPath=concPath.substring(1);
+
+            for (String base : basePath) {
+                f = new File(base+File.separator+concPath);
+                if (f.exists()) {
+                    return f.getAbsolutePath();
+                }
+
+            }
+
+            return null;
+        }
+
+
+        /**
+         * turn the information into a absolute path
+         * @return 
+         */
+        public String getFileRelative(ArrayList<File> basePath) {
+            ArrayList<String> forward  = new ArrayList<String>(basePath.size());
+            for (File f: basePath) {
+                if (f.isFile()) {
+                    f=f.getParentFile();
+                }
+                forward.add(f.getAbsolutePath());
+            }
+            return getFile(forward);
+        }
+
+        public JarDefinition getForVersion(String version) {
+            return new JarDefinition(path, baseName, extension, version);
+        }
+
+
+    }
+    
     public class DBConnection {
+        
 
         String server = null;
         Integer port = null;
@@ -64,6 +187,14 @@ public class Config {
             return conString;
         }
 
+        public String getUser() {
+            return user;
+        }
+        
+        public String getPassword() {
+            return password;
+        }
+        
         public synchronized Connection getConnection() throws SQLException {
             try {
                 Class.forName("org.postgresql.Driver");
@@ -205,6 +336,8 @@ public class Config {
     public boolean stop = false;
 
     public long connectionRecoveryTryMili = 1000 * 60 * 30;
+    
+    public JarDefinition defaultJar = new JarDefinition(".", "XiSearch");
 
 //    public Config() throws IOException {
 //        readDefaultConfig();
@@ -217,51 +350,23 @@ public class Config {
         readConfig(configFile);
     }
 
-    public Config(BufferedReader config) throws IOException {
-        readConfig(config);
-    }
 
-    public void readDefaultConfig() throws IOException {
-        String path = ".rappsilber.xilauncher.config.DefaultConfig.conf";
-        String filePath = path;
-        URL res = Object.class.getResource(path);
 
-        while (res == null && path.contains(".")) {
-
-            path = path.replaceFirst("\\.", Matcher.quoteReplacement(File.separator));
-            res = Object.class.getResource(path);
-        }
-
-        if (res == null) {
-            path = filePath;
-            while (res == null && path.contains(".")) {
-
-                path = path.replaceFirst("\\.", "/");
-                res = Object.class.getResource(path);
-            }
-        }
-
-        InputStream is = Object.class.getResourceAsStream(path);
-        readConfig(new BufferedReader(new InputStreamReader(is)));
-    }
-
-    public void readConfig(File config) throws FileNotFoundException, IOException {
-        this.configFile = config;
-        configFileChangeTime.put(config, configFile.lastModified());
-        readConfig(new BufferedReader(new FileReader(configFile)));
-    }
-
-    public void readConfig(BufferedReader config) throws IOException {
+    public void readConfig(File fconfig) throws FileNotFoundException, IOException {
+        this.configFile = fconfig;
+        configFileChangeTime.put(fconfig, configFile.lastModified());
+        
         ArrayList<Queue> confqueues = new ArrayList<Queue>(queues.length);
-        ArrayList<BufferedReader> configs = new ArrayList<BufferedReader>(1);
         ArrayList<File> configFiles = new ArrayList<File>(1);
         configFiles.add(configFile);
-        configs.add(config);
         replacements = new HashMap<String, String>();
         boolean pause = false;
+        
         synchronized (sync) {
-            for (int c = 0; c < configs.size(); c++) {
-                config = configs.get(c);
+            for (int c = 0; c < configFiles.size(); c++) {
+                File cf = configFiles.get(c);
+                BufferedReader config = new BufferedReader(new FileReader(cf));
+                
 //                ArrayList<Integer> queueSizes = new ArrayList<Integer>();
 //                ArrayList<String[]> queueArguments = new ArrayList<String[]>();
                 int ln = 1;
@@ -299,7 +404,6 @@ public class Config {
                                     File currentFile = configFiles.get(c);
                                     included = new File(currentFile.getParent() + File.separator + line.trim());
                                 }
-                                configs.add(new BufferedReader(new FileReader(included)));
                                 configFiles.add(included);
                                 configFileChangeTime.put(included, included.lastModified());
                             }
@@ -389,6 +493,46 @@ public class Config {
                             System.err.println("[QUEUE]-section without arguments (ARGUMENTS=XXX) (line:" + sectionLine + ")");
                             System.exit(-1);
                         }
+                    } else if(line.trim().toLowerCase().contentEquals("[jar]")) {
+                        String base="xiVersions";
+                        String ext =".jar";
+                        String version = null;
+                        String path = ".";
+                        String b = "base=";
+                        String e ="extension=";
+                        String v = "version=";
+                        String p = "path=";
+                        line = config.readLine();
+                        ln++;
+                        while (line != null && !line.trim().startsWith("[")) {
+                            if (!(line.trim().startsWith("#")|| line.trim().isEmpty())) {
+                                if (line.startsWith(b)) {
+                                    base = line.substring(b.length()).trim();
+                                } else if (line.startsWith(e)) {
+                                    ext = line.substring(e.length()).trim();
+                                } else if (line.startsWith(v)) {
+                                    version = line.substring(v.length()).trim();
+                                } else if (line.startsWith(p)) {
+                                    path = line.substring(p.length()).trim();
+                                } else {
+                                    System.err.println("Unknown option in section [JAR] (line:" + ln + "):" + line + "\n -> line ignored");
+                                }
+                            }
+
+                            line = config.readLine();
+                            ln++;
+                        }
+                        defaultJar = new JarDefinition(path, base, ext, version);
+                        if (defaultJar.getFile() == null) {
+                            defaultJar = new JarDefinition(cf.getAbsoluteFile().getParent()+File.separator+path, base, ext, version);
+                        }
+                        if (defaultJar.getFile() == null) {
+                            defaultJar = new JarDefinition(configFile.getAbsoluteFile().getParent()+File.separator+path, base, ext, version);
+                        }
+                        if (defaultJar.getFile() == null) {
+                            defaultJar = new JarDefinition(path, base, ext, version);
+                        }
+                        
                     } else if (line.trim().toLowerCase().contentEquals("[database]")) {
                         String connection = null;
                         String user = "user";
@@ -490,7 +634,7 @@ public class Config {
             return false;
         }
         for (Map.Entry<File, Long> e : configFileChangeTime.entrySet()) {
-            if (e.getKey().lastModified() > e.getValue()) {
+            if (e.getKey().lastModified() != e.getValue()) {
                 return true;
             }
         }
@@ -546,7 +690,7 @@ public class Config {
             queues = qs;
         }
         this.server = nc.server;
-
+        this.defaultJar = nc.defaultJar;
     }
 
     public void disableServer(DBConnection server) {
@@ -595,5 +739,7 @@ public class Config {
             }
         }
     }
+    
+    
 
 }

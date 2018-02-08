@@ -5,6 +5,8 @@
 package rappsilber.xilauncher;
 
 import java.io.FileNotFoundException;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.logging.Level;
@@ -37,9 +39,9 @@ public class LauncherThread extends Thread{
     public void run() {
         queue.started = true;
         SimpleDateFormat logDate = new SimpleDateFormat("yyyyMMdd_HHmmss");
-        ObjectWrapper<String> name = new ObjectWrapper<String>();
-        ObjectWrapper<Integer> search = new ObjectWrapper<Integer>();
-        ObjectWrapper<Config.DBConnection> connection = new ObjectWrapper<Config.DBConnection>();
+//        ObjectWrapper<String> name = new ObjectWrapper<String>();
+//        ObjectWrapper<Integer> search = new ObjectWrapper<Integer>();
+//        ObjectWrapper<Config.DBConnection> connection = new ObjectWrapper<Config.DBConnection>();
         boolean oldEnabled = true;
         System.out.println("queue " + queue.name + " started");
         int smallSearchesRun =0;
@@ -67,12 +69,12 @@ public class LauncherThread extends Thread{
                 }
                 
                 String[] args = new String[defargs.length + 2];
-                boolean haveRun = false;
-                
+                XiSearch nextRun = null; 
+                        
                 if (smallSearchesRun <5) {
                     if (maxPeakListSize!= null && maxPeakListSize > 0) {
-                        haveRun = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf, connection, search, name,priouser);
-                        if (haveRun) {
+                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser);
+                        if (nextRun != null) {
                             smallSearchesRun+=1;
                         }
                     }
@@ -80,25 +82,46 @@ public class LauncherThread extends Thread{
                     smallSearchesRun = 0;
                 }
                 
-                if (!haveRun)
-                    haveRun = XiLauncher.getNextRun(maxSize, conf, connection, search, name,priouser);
+                if (nextRun == null)
+                    nextRun = XiLauncher.getNextRun(maxSize, conf, priouser);
                 
-               
-                if (haveRun) {
+                boolean haveRun = false;
+                if (nextRun != null) {
                     // ok we have a run make sure nobody else is starting it.
-                    haveRun = XiLauncher.lockRun(conf, connection, search, name);
+                    haveRun = XiLauncher.lockRun(conf, nextRun);
                 }
                 
                 if (haveRun) {
+                    // we have the run and canstart xi now
                     if (System.getProperty("TRYRUN","FALSE").contentEquals("TRUE"))
                         continue;
+                    
+                    Config.JarDefinition j = conf.defaultJar;
+                    if (nextRun.xiVersion != null && !nextRun.xiVersion.isEmpty()) {
+                        j = j.getForVersion(nextRun.xiVersion);
+                        if (j.getFile() == null) {
+                            try {
+                                Statement st = nextRun.connection.getConnection().createStatement();
+                                st.execute("UPDATE search SET status = 'XiLauncher: Requested Xi version not found' WHERE  id = " + nextRun.search +";");
+                                st.close();
+                                nextRun.connection.getConnection().commit();
+                                continue;
+                            } catch (SQLException ex) {
+                                Logger.getLogger(LauncherThread.class.getName()).log(Level.SEVERE, null, ex);
+                            }
+                        }
+                    }
+                    
+                    
                     for (int a = 0 ; a< defargs.length; a++) {
-                        args[a] = defargs[a].replace("%DB%", connection.getValue().getConnectionString());
-                        args[a] = args[a].replace("%DBUSER%", connection.getValue().getConnectionString());
+                        args[a] = defargs[a].replace("%DB%", nextRun.connection.getConnectionString());
+                        args[a] = args[a].replace("%DBUSER%", nextRun.connection.getUser());
+                        args[a] = args[a].replace("%DBPASS%", nextRun.connection.getPassword());
+                        args[a] = args[a].replace("%JAR%", j.getFile());
                     }
     //                args[defaultArgs.length + 2] = "rappsilber.applications.XiDB";
-                    args[defargs.length + 0] = search.toString();
-                    args[defargs.length + 1] = name.toString();
+                    args[defargs.length + 0] = nextRun.search.toString();
+                    args[defargs.length + 1] = nextRun.name;
                     
                     ProcessLauncher launcher = new ProcessLauncher(args);
                     Calendar c = Calendar.getInstance();
@@ -106,12 +129,12 @@ public class LauncherThread extends Thread{
                     String sdate = logDate.format(c.getTime());
                     ProcessLogger plout = null;
                     try {
-                        String n = name.v.replaceAll("[^a-zA-Z0-9\\._]","_");
+                        String n = nextRun.name.replaceAll("[^a-zA-Z0-9\\._]","_");
                         if (n.length() > 30) {
                             n= n.substring(0, 30);
                         }
-                        plout = new ProcessLogger(logDir + sdate+"_"+connection.v.getConnectionString().replaceAll("[^a-zA-Z0-9\\._]","_")+"_Search_" + search+"_"+ n + ".log", true);
-                        plout.standardOutput("\n"+sdate+": Start Xi on database " + connection + " starting serach " + name + "(" + search + ")\n");
+                        plout = new ProcessLogger(logDir + sdate+"_"+nextRun.connection.getConnectionString().replaceAll("[^a-zA-Z0-9\\._]","_")+"_Search_" + nextRun.search +"_"+ n + ".log", true);
+                        plout.standardOutput("\n"+sdate+": Start Xi on database " + nextRun.connection + " starting serach " + nextRun.name + "(" + nextRun.search + ")\n");
                         launcher.addOutputListener(plout);
                     } catch (FileNotFoundException ex) {
                         Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE, null, ex);
@@ -119,7 +142,7 @@ public class LauncherThread extends Thread{
                     launcher.launch();
                     if (plout != null)  {
                         sdate = logDate.format(c.getTime());
-                        plout.standardOutput("\n"+sdate+": finished Xi on database " + connection + " starting serach " + name + "(" + search + ")\n");
+                        plout.standardOutput("\n"+sdate+": finished Xi on database " + nextRun.connection + " starting serach " + nextRun.name + "(" + nextRun.search + ")\n");
                     }
 
                 }

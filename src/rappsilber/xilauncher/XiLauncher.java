@@ -167,8 +167,8 @@ public class XiLauncher {
     
     private static HashMap<Config.DBConnection,LinkedList<Integer>>  usercount = new HashMap<Config.DBConnection, LinkedList<Integer>>();
 
-    public static synchronized boolean getNextRun(int maxFastaSize, Config conf, ObjectWrapper<Config.DBConnection> connection, ObjectWrapper<Integer> search, ObjectWrapper<String> name,  Integer prioUserID){
-        return getNextRun(maxFastaSize, 0, conf, connection, search, name,prioUserID);
+    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, Integer prioUserID){
+        return getNextRun(maxFastaSize, 0, conf,prioUserID);
     }
     
     /**
@@ -185,13 +185,13 @@ public class XiLauncher {
      * @param name
      * @return 
      */
-    public static boolean lockRun(Config conf, ObjectWrapper<Config.DBConnection> connection, ObjectWrapper<Integer> search, ObjectWrapper<String> name) { 
+    public static boolean lockRun(Config conf, XiSearch run) { 
         Connection con = null;
         boolean canStart = false;
         
         for (Config.DBConnection db: conf.server) {
             // get all searches, that are queuing and not executing
-            if (db.getConnectionString().contentEquals(connection.v.getConnectionString())) {
+            if (db.getConnectionString().contentEquals(run.connection.getConnectionString())) {
                 try {
                     con = db.getConnection();
                     db.resetRetry();
@@ -209,7 +209,7 @@ public class XiLauncher {
             
         try {
             con.setAutoCommit(false);
-            ResultSet rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT status, id FROM SEARCH WHERE ID = " + search.getValue() + " AND status = 'queuing' AND NOT is_executing FOR UPDATE");
+            ResultSet rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT status, id FROM SEARCH WHERE ID = " + run.search + " AND status = 'queuing' AND NOT is_executing FOR UPDATE");
             if (rs.next()) {
                 rs.updateString(1, "SELECTED");
                 rs.updateRow();
@@ -217,6 +217,20 @@ public class XiLauncher {
             }
             rs.close();
             con.commit();
+            if (canStart) {
+                rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT customsettings FROM parameter_set ps INNER JOIN search s on s.paramset_id = ps.id WHERE s.id = " + run.search +";");
+                if (rs.next()) {
+                    String xiv = "xiversion:";
+                    String custom = rs.getString(1);
+                    String[] lines = custom.split("[\n\r]+");
+                    for (String l : lines) {
+                        if (l.trim().toLowerCase().startsWith(xiv)) {
+                            run.xiVersion = l.trim().substring(xiv.length());
+                        }
+                    }
+                }
+                rs.close();
+            }
             return canStart;
                     
         } catch (SQLException ex) {
@@ -232,7 +246,7 @@ public class XiLauncher {
     }
     
     
-    public static synchronized boolean getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, ObjectWrapper<Config.DBConnection> connection, ObjectWrapper<Integer> search, ObjectWrapper<String> name, Integer prioUserId){
+    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, Integer prioUserId){
         Calendar now = Calendar.getInstance();
         HashSet<String> cleanup = new HashSet<String>();
         for (String run : runs.keySet()) {
@@ -255,7 +269,7 @@ public class XiLauncher {
                 System.err.println(e);
                 if (db.decreaseRetry()) {
                     conf.disableServer(db);
-                    return false;
+                    return null;
                 }
             }
 
@@ -300,11 +314,12 @@ public class XiLauncher {
                         String basepath = db.getBasePath();
                         int s = getDatabaseSize(con, searchid, basepath);
                         int p = getPeakListSize(con, searchid, basepath);
-                        if (s<= maxFastaSize && (maxPeakListSize <=0 || (p>0 && maxPeakListSize>=p))) {       
-                            connection.setValue(db);
-                            search.setValue(searchid);
-                            name.setValue(rs.getString(2));
-                            String run = connection.getValue().getConnectionString() + search.getValue();
+                        if (s<= maxFastaSize && (maxPeakListSize <=0 || (p>0 && maxPeakListSize>=p))) { 
+                            XiSearch ret = new XiSearch();
+                            ret.connection=db;
+                            ret.search=searchid;
+                            ret.name=rs.getString(2);
+                            String run = ret.connection.getConnectionString() + ret.search;
                             // was not run in a bit
                             if (!runs.containsKey(run)) {
                                 runs.put(run, Calendar.getInstance());
@@ -315,7 +330,7 @@ public class XiLauncher {
                                     dbUserCount.remove(0);
                                 }
 
-                                return true;
+                                return ret;
                             }
                         }
                     }
@@ -324,7 +339,7 @@ public class XiLauncher {
                 System.err.println(se);
             }
         }
-        return false;
+        return null;
         
     }
     
