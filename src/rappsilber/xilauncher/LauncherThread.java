@@ -48,10 +48,11 @@ public class LauncherThread extends Thread{
         while (!queue.stop) {
             String[] defargs;
             Integer maxSize;
-            Integer maxPeakListSize;
+            Integer prioritisedMaxPeakListSize;
+            int maxPeakListSize;
             boolean enabled;
             String queuename;
-            Integer priouser;
+            String priouser;
             conf.recoverServers();
             
             synchronized (queue) {
@@ -59,8 +60,9 @@ public class LauncherThread extends Thread{
                 maxSize = queue.maxFastaSize;
                 enabled = queue.enabled;
                 queuename = queue.name;
-                maxPeakListSize = queue.recomendedMaxPeakList;
-                priouser = queue.prioUserID;
+                prioritisedMaxPeakListSize = queue.prioritisedMaxPeakList;
+                maxPeakListSize = queue.maxPeakList;
+                priouser = queue.prioUser;
             }
             
             if (enabled) {
@@ -70,10 +72,11 @@ public class LauncherThread extends Thread{
                 
                 String[] args = new String[defargs.length + 2];
                 XiSearch nextRun = null; 
-                        
+                
                 if (smallSearchesRun <5) {
-                    if (maxPeakListSize!= null && maxPeakListSize > 0) {
-                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser);
+                    if (prioritisedMaxPeakListSize!= null && prioritisedMaxPeakListSize > 0) {
+                        prioritisedMaxPeakListSize = Math.min(maxPeakListSize, prioritisedMaxPeakListSize);
+                        nextRun  = XiLauncher.getNextRun(maxSize, prioritisedMaxPeakListSize, conf,priouser);
                         if (nextRun != null) {
                             smallSearchesRun+=1;
                         }
@@ -82,8 +85,12 @@ public class LauncherThread extends Thread{
                     smallSearchesRun = 0;
                 }
                 
-                if (nextRun == null)
-                    nextRun = XiLauncher.getNextRun(maxSize, conf, priouser);
+                if (nextRun == null) {
+                    if (maxPeakListSize>0)
+                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser);
+                    else
+                        nextRun = XiLauncher.getNextRun(maxSize, conf, priouser);
+                }
                 
                 boolean haveRun = false;
                 if (nextRun != null) {
@@ -124,6 +131,7 @@ public class LauncherThread extends Thread{
                     args[defargs.length + 1] = nextRun.name;
                     
                     ProcessLauncher launcher = new ProcessLauncher(args);
+                    Logger.getLogger(this.getClass().getName()).log(Level.INFO,"running: " + launcher.getCommandLine());
                     Calendar c = Calendar.getInstance();
 
                     String sdate = logDate.format(c.getTime());

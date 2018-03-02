@@ -202,7 +202,9 @@ public class Config {
                 Logger.getLogger(this.getClass().getName()).log(Level.SEVERE, null, ex);
                 return null;
             }
-            if (!connection_opened) {
+            
+            if (!connection_opened || !testConnection(con)) {
+                connection_opened = false;
                 String conString = getConnectionString();
                 if (conString == null) {
                     return null;
@@ -213,6 +215,7 @@ public class Config {
                     connection_opened = true;
                 } catch (ClassNotFoundException ex) {
                     Logger.getLogger(this.getClass().getName()).log(Level.SEVERE, null, ex);
+                    throw new SQLException(ex);
                 }
 
             }
@@ -305,14 +308,30 @@ public class Config {
             retry = 10;
         }
 
+        private boolean testConnection(Connection con) {
+            try {
+                Statement st = con.createStatement();
+                ResultSet rs = st.executeQuery("SELECT 1;");
+                st.close();
+                return true;
+            } catch (SQLException ex) {
+                Logger.getLogger(Config.class.getName()).log(Level.SEVERE, null, ex);
+                try {
+                    con.close();
+                } catch (Exception e) {}
+            }
+            return false;
+        }
+
     }
 
     public class Queue {
 
         public String name = null;
         public Integer maxFastaSize = null;
-        public int recomendedMaxPeakList = 0;
-        public Integer prioUserID = null;
+        public int prioritisedMaxPeakList = 0;
+        public int maxPeakList = 0;
+        public String prioUser = null;
         public String[] Args = null;
         public boolean enabled = true;
         public boolean stop = false;
@@ -422,37 +441,17 @@ public class Config {
                                 if (sl[0].trim().toLowerCase().contentEquals("queue")) {
                                     q.name = sl[1];
                                 } else if (sl[0].trim().toLowerCase().contentEquals("priorityuser")) {
-                                    q.prioUserID = Integer.parseInt(sl[1].trim());
+                                    q.prioUser = sl[1].trim();
                                 } else if (sl[0].trim().toLowerCase().contentEquals("maxfastasize")) {
                                     String ssize = sl[1].trim().toUpperCase();
-                                    double m = 1;
-                                    double v = 0;
-                                    if (ssize.endsWith("G")) {
-                                        m = 1024 * 1024 * 1024;
-                                        ssize = ssize.substring(0, ssize.length() - 1).trim();
-                                    } else if (ssize.endsWith("M")) {
-                                        m = 1024 * 1024;
-                                        ssize = ssize.substring(0, ssize.length() - 1).trim();
-                                    } else if (ssize.endsWith("K")) {
-                                        m = 1024;
-                                        ssize = ssize.substring(0, ssize.length() - 1).trim();
-                                    }
-                                    q.maxFastaSize = (int) (Double.parseDouble(ssize) * m);
-                                } else if (sl[0].trim().toLowerCase().contentEquals("recomendedpeaklistsize")) {
+                                    q.maxFastaSize = parseSize(ssize);
+                                } else if (sl[0].trim().toLowerCase().contentEquals("prioritisedpeaklistsize")) {
                                     String ssize = sl[1].trim().toUpperCase();
-                                    double m = 1;
-                                    double v = 0;
-                                    if (ssize.endsWith("G")) {
-                                        m = 1024 * 1024 * 1024;
-                                        ssize = ssize.substring(0, ssize.length() - 1).trim();
-                                    } else if (ssize.endsWith("M")) {
-                                        m = 1024 * 1024;
-                                        ssize = ssize.substring(0, ssize.length() - 1).trim();
-                                    } else if (ssize.endsWith("K")) {
-                                        m = 1024;
-                                        ssize = ssize.substring(0, ssize.length() - 1).trim();
-                                    }
-                                    q.recomendedMaxPeakList = (int) (Double.parseDouble(ssize) * m);
+                                    
+                                    q.prioritisedMaxPeakList = parseSize(ssize);
+                                } else if (sl[0].trim().toLowerCase().contentEquals("maxpeaklistsize")) {
+                                    String ssize = sl[1].trim().toUpperCase();
+                                    q.maxPeakList = parseSize(ssize);
                                 } else if (sl[0].trim().toLowerCase().contentEquals("arguments")) {
                                     String[] ARGUMENTS = sl[1].trim().split("\\s+");
                                     boolean dbFound = false;
@@ -629,6 +628,23 @@ public class Config {
 
     }
 
+    public int parseSize(String ssize) throws NumberFormatException {
+        double m = 1;
+        double v = 0;
+        if (ssize.endsWith("G")) {
+            m = 1024 * 1024 * 1024;
+            ssize = ssize.substring(0, ssize.length() - 1).trim();
+        } else if (ssize.endsWith("M")) {
+            m = 1024 * 1024;
+            ssize = ssize.substring(0, ssize.length() - 1).trim();
+        } else if (ssize.endsWith("K")) {
+            m = 1024;
+            ssize = ssize.substring(0, ssize.length() - 1).trim();
+        }
+        int totalSize = (int) (Double.parseDouble(ssize) * m);
+        return totalSize;
+    }
+
     public boolean configChanged() {
         if (configFile == null) {
             return false;
@@ -657,8 +673,9 @@ public class Config {
                         qo.enabled = q.enabled;
                         qo.stop = q.stop;
                         qo.maxFastaSize = q.maxFastaSize;
-                        qo.prioUserID = q.prioUserID;
-                        qo.recomendedMaxPeakList = q.recomendedMaxPeakList;
+                        qo.prioUser = q.prioUser;
+                        qo.prioritisedMaxPeakList = q.prioritisedMaxPeakList;
+                        qo.maxPeakList = q.maxPeakList;
                     }
                     qfound = true;
                     foundThreads.add(q);

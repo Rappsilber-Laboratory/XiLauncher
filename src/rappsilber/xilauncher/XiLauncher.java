@@ -167,8 +167,8 @@ public class XiLauncher {
     
     private static HashMap<Config.DBConnection,LinkedList<Integer>>  usercount = new HashMap<Config.DBConnection, LinkedList<Integer>>();
 
-    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, Integer prioUserID){
-        return getNextRun(maxFastaSize, 0, conf,prioUserID);
+    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, String prioUser){
+        return getNextRun(maxFastaSize, 0, conf,prioUser);
     }
     
     /**
@@ -218,6 +218,7 @@ public class XiLauncher {
             rs.close();
             con.commit();
             if (canStart) {
+                boolean versionSet = false;
                 rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT customsettings FROM parameter_set ps INNER JOIN search s on s.paramset_id = ps.id WHERE s.id = " + run.search +";");
                 if (rs.next()) {
                     String xiv = "xiversion:";
@@ -225,11 +226,52 @@ public class XiLauncher {
                     String[] lines = custom.split("[\n\r]+");
                     for (String l : lines) {
                         if (l.trim().toLowerCase().startsWith(xiv)) {
-                            run.xiVersion = l.trim().substring(xiv.length());
+                            run.xiVersion = l.trim().substring(xiv.length()).trim();
+                            versionSet = true;
                         }
                     }
                 }
                 rs.close();
+                try {
+                    if (!versionSet) {
+                        // do we have thetable xi-versions?
+                        rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT EXISTS (\n" +
+                                "   SELECT 1\n" +
+                                "   FROM   information_schema.tables \n" +
+                                "   WHERE  table_schema = 'public'\n" +
+                                "   AND    table_name = 'xiversions'\n" +
+                                "   );");
+
+                        rs.next();
+                        boolean canSetVersion = rs.getBoolean(1);
+                        rs.close();
+                        
+                        if (canSetVersion) {
+                            rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT version FROM search s inner join xiversions xv on s.xiversion = xv.id WHERE s.id = " + run.search +";");
+                            if (rs.next()) {
+                                String version = rs.getString(1);
+                                if ( version != null ) {
+                                    run.xiVersion = version.trim();
+                                    versionSet  = true;
+                                }
+                            }
+                            rs.close();
+                            if (!versionSet) {
+                                rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT version FROM xiversions xv WHERE isdefault;");
+                                if (rs.next()) {
+                                    String version = rs.getString(1);
+                                    if ( version != null ) {
+                                        run.xiVersion = version.trim();
+                                    }
+                                }
+                                rs.close();
+                            }
+                        }
+                    }
+                } catch (SQLException se) {
+                    Logger.getLogger(XiLauncher.class.getName()).log(Level.WARNING,"could not read xi-versions from the database",se);
+                }
+                
             }
             return canStart;
                     
@@ -246,7 +288,7 @@ public class XiLauncher {
     }
     
     
-    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, Integer prioUserId){
+    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, String prioUser){
         Calendar now = Calendar.getInstance();
         HashSet<String> cleanup = new HashSet<String>();
         for (String run : runs.keySet()) {
@@ -301,8 +343,12 @@ public class XiLauncher {
             } else {
                 orderby.append("ORDER BY ID");
             }
-            if (prioUserId != null) {
-                orderby.insert(8, " CASE WHEN uploadedby = " + prioUserId +" THEN 0 ELSE 1 END, ");
+            if (prioUser != null) {
+                if (prioUser.matches("[0-9]+")) {
+                    orderby.insert(8, " CASE WHEN uploadedby = " + prioUser +" THEN 0 ELSE 1 END, ");
+                } else {
+                    orderby.insert(8, " CASE WHEN uploadedby = (select id from users where user_name = '" + prioUser +"') THEN 0 ELSE 1 END, ");
+                }
             }
             
             
@@ -336,7 +382,7 @@ public class XiLauncher {
                     }
                 }
             } catch (SQLException se) {
-                System.err.println(se);
+                Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE, null, se);
             }
         }
         return null;
