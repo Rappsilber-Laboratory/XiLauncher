@@ -461,7 +461,7 @@ public class Config {
                                         }
                                     }
                                     if (!dbFound) {
-                                        System.err.println("ARGUMENTS don't provide a db-placeholder (%DB%) (line:" + ln + "):" + line + "\n -> queue disabled");
+                                        Logger.getLogger(this.getClass().getName()).log(Level.SEVERE,"ARGUMENTS don't provide a db-placeholder (%DB%) (line:" + ln + "):" + line + "\n -> queue disabled");
                                         q.enabled = false;
                                     }
                                     q.Args = ARGUMENTS;
@@ -472,12 +472,12 @@ public class Config {
                                     } else if (sl[1].trim().toLowerCase().matches("(0|no|n|false|f|nein)")) {
                                         q.enabled = false;
                                     } else {
-                                        System.err.println("unknow argument for enabled:(line " + ln + "):" + line + "\n -> queue disabled");
+                                        Logger.getLogger(this.getClass().getName()).log(Level.SEVERE,"unknow argument for enabled:(line " + ln + "):" + line + "\n -> queue disabled");
                                         q.enabled = false;
                                     }
 
                                 } else {
-                                    System.err.println("Unknown option in section [queue] (line:" + ln + "):" + line + "\n -> queue disabled");
+                                    Logger.getLogger(this.getClass().getName()).log(Level.SEVERE,"Unknown option in section [queue] (line:" + ln + "):" + line + "\n -> queue disabled");
                                     q.enabled = false;
                                 }
                             }
@@ -485,11 +485,11 @@ public class Config {
                             ln++;
                         }
                         if (q.maxFastaSize == null) {
-                            System.err.println("[QUEUE]-section without size information(MAXFASTASIZE=XXX) (line:" + sectionLine + ")");
+                            Logger.getLogger(this.getClass().getName()).log(Level.SEVERE,"[QUEUE]-section without size information(MAXFASTASIZE=XXX) (line:" + sectionLine + ")");
                             System.exit(-1);
                         }
                         if (q.Args == null) {
-                            System.err.println("[QUEUE]-section without arguments (ARGUMENTS=XXX) (line:" + sectionLine + ")");
+                            Logger.getLogger(this.getClass().getName()).log(Level.SEVERE,"[QUEUE]-section without arguments (ARGUMENTS=XXX) (line:" + sectionLine + ")");
                             System.exit(-1);
                         }
                     } else if(line.trim().toLowerCase().contentEquals("[jar]")) {
@@ -514,7 +514,7 @@ public class Config {
                                 } else if (line.startsWith(p)) {
                                     path = line.substring(p.length()).trim();
                                 } else {
-                                    System.err.println("Unknown option in section [JAR] (line:" + ln + "):" + line + "\n -> line ignored");
+                                    Logger.getLogger(this.getClass().getName()).log(Level.WARNING,"Unknown option in section [JAR] (line:" + ln + "):" + line + "\n -> line ignored");
                                 }
                             }
 
@@ -550,14 +550,14 @@ public class Config {
                                 } else if (sl[0].trim().toLowerCase().contentEquals("password")) {
                                     password = sl[1].trim();
                                 } else {
-                                    System.err.println("Unknown option in section [database] (line:" + ln + "):" + line + "\n -> ignored");
+                                    Logger.getLogger(this.getClass().getName()).log(Level.WARNING,"Unknown option in section [database] (line:" + ln + "):" + line + "\n -> ignored");
                                 }
                             }
                             line = config.readLine();
                             ln++;
                         }
                         if (connection == null) {
-                            System.err.println("[DATABASE]-section connection SETTING MISSING (CONNECTION=jdb:postgrsql://server:port/db)");
+                            Logger.getLogger(this.getClass().getName()).log(Level.SEVERE,"[DATABASE]-section connection SETTING MISSING (CONNECTION=jdb:postgrsql://server:port/db)");
                         } else {
                             try {
                                 if (user != null) {
@@ -624,7 +624,7 @@ public class Config {
 //            this.queus = XiArgs.length;
         }
 
-        System.out.println("Queues:" + queues.length);
+        Logger.getLogger(this.getClass().getName()).log(Level.INFO,"Queues:" + queues.length);
 
     }
 

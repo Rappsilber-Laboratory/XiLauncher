@@ -43,7 +43,7 @@ public class LauncherThread extends Thread{
 //        ObjectWrapper<Integer> search = new ObjectWrapper<Integer>();
 //        ObjectWrapper<Config.DBConnection> connection = new ObjectWrapper<Config.DBConnection>();
         boolean oldEnabled = true;
-        System.out.println("queue " + queue.name + " started");
+        Logger.getLogger(this.getClass().getName()).log(Level.INFO,"queue " + queue.name + " started");
         int smallSearchesRun =0;
         while (!queue.stop) {
             String[] defargs;
@@ -67,7 +67,7 @@ public class LauncherThread extends Thread{
             
             if (enabled) {
                 if (!oldEnabled) {
-                    System.out.println("queue " + queuename + " enabled");
+                    Logger.getLogger(this.getClass().getName()).log(Level.INFO,"queue " + queuename + " enabled");
                 }
                 
                 String[] args = new String[defargs.length + 2];
@@ -108,8 +108,9 @@ public class LauncherThread extends Thread{
                         j = j.getForVersion(nextRun.xiVersion);
                         if (j.getFile() == null) {
                             try {
+                                Logger.getLogger(this.getClass().getName()).log(Level.WARNING,"XiLauncher: Requested Xi version ("+ nextRun.xiVersion+") not found for search " + nextRun.search +"");
                                 Statement st = nextRun.connection.getConnection().createStatement();
-                                st.execute("UPDATE search SET status = 'XiLauncher: Requested Xi version not found' WHERE  id = " + nextRun.search +";");
+                                st.execute("UPDATE search SET status = 'XiLauncher: Requested Xi version("+ nextRun.xiVersion +") not found' WHERE  id = " + nextRun.search +";");
                                 st.close();
                                 nextRun.connection.getConnection().commit();
                                 continue;
@@ -156,7 +157,7 @@ public class LauncherThread extends Thread{
                 }
             } else {
                 if (!oldEnabled) {
-                    System.out.println("queue " + queuename + " disabled");
+                    Logger.getLogger(this.getClass().getName()).log(Level.INFO,"queue " + queuename + " disabled");
                 }
             }
             try {

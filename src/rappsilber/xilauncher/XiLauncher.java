@@ -15,10 +15,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import rappsilber.utils.UpdateableInteger;
 import rappsilber.xilauncher.config.Config;
+import rappsilber.xilauncher.log.OutputSplitter;
 
 /**
  *
@@ -196,8 +198,7 @@ public class XiLauncher {
                     con = db.getConnection();
                     db.resetRetry();
                 } catch (Exception e)  {
-                    System.err.println("Error getting database connection");
-                    System.err.println(e);
+                    Logger.getLogger(XiLauncher.class.getName()).log(Level.WARNING,"Error getting database connection",e);
                     if (db.decreaseRetry()) {
                         conf.disableServer(db);
                         return false;
@@ -234,7 +235,7 @@ public class XiLauncher {
                 rs.close();
                 try {
                     if (!versionSet) {
-                        // do we have thetable xi-versions?
+                        // do we have the xiversions table?
                         rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT EXISTS (\n" +
                                 "   SELECT 1\n" +
                                 "   FROM   information_schema.tables \n" +
@@ -307,8 +308,7 @@ public class XiLauncher {
             try {
                 con = db.getConnection();
             } catch (Exception e)  {
-                System.err.println("Error getting database connection");
-                System.err.println(e);
+                Logger.getLogger(XiLauncher.class.getName()).log(Level.WARNING,"Error getting database connection",e);
                 if (db.decreaseRetry()) {
                     conf.disableServer(db);
                     return null;
@@ -421,10 +421,11 @@ public class XiLauncher {
         if (args.length > 0) {
             conf = new Config(args[0]);
         } else {
-            System.err.println("No configuration given");
+            Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE,"No configuration given");
             System.exit(-1);
         }
-            
+        
+        
         
 
         stop = conf.stop;
@@ -433,6 +434,9 @@ public class XiLauncher {
             File ld = new File(args[1]);
             if (new File(args[1]).isDirectory()) {
                 logDir = ld.getAbsolutePath() + File.separator;
+                FileHandler fh = new FileHandler(logDir+File.separator+"XiLauncher.log");
+                Logger.getGlobal().addHandler(fh);
+                Logger.getLogger("rappsilber").addHandler(fh);
             }
         }
         LauncherThread[] threads;
@@ -446,11 +450,11 @@ public class XiLauncher {
             
             if (conf.configChanged()) {
                 stop = true;
-                System.err.println("!!!!Config changed!!!!");
+                Logger.getLogger(XiLauncher.class.getName()).log(Level.INFO,"!!!!Config changed!!!!");
 //                while (!waitForThreads(threads, 1000)) {
-//                    System.err.println("waiting for searches to finish");
+//                    Logger.getLogger(this.getClass().getName())("waiting for searches to finish");
 //                }
-                System.err.println("reread config");
+                Logger.getLogger(XiLauncher.class.getName()).log(Level.INFO,"reread config");
                 conf.reReadConfig();
                 stop = conf.stop;
                 ArrayList<LauncherThread> newthreads = new ArrayList<LauncherThread>();
@@ -461,7 +465,7 @@ public class XiLauncher {
                         }
                     }
                     if (newthreads.size()>0) {
-                        System.err.println("starting threads");
+                        Logger.getLogger(XiLauncher.class.getName()).log(Level.INFO,"starting threads");
                         LauncherThread[] nt = java.util.Arrays.copyOf(threads, threads.length+newthreads.size());
                         for (int i = threads.length; i< nt.length; q++) {
                             nt[i] = newthreads.get(i-threads.length);
@@ -471,7 +475,7 @@ public class XiLauncher {
                         
                     }
                 } else {
-                    System.out.println("Waiting for threads to finish.");
+                    Logger.getLogger(XiLauncher.class.getName()).log(Level.INFO,"Waiting for threads to finish.");
                 }
             }
             
