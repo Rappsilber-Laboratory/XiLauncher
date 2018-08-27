@@ -6,6 +6,7 @@ package rappsilber.xilauncher;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -15,6 +16,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -224,11 +226,13 @@ public class XiLauncher {
                 if (rs.next()) {
                     String xiv = "xiversion:";
                     String custom = rs.getString(1);
-                    String[] lines = custom.split("[\n\r]+");
-                    for (String l : lines) {
-                        if (l.trim().toLowerCase().startsWith(xiv)) {
-                            run.xiVersion = l.trim().substring(xiv.length()).trim();
-                            versionSet = true;
+                    if (custom != null) {
+                        String[] lines = custom.split("[\n\r]+");
+                        for (String l : lines) {
+                            if (l.trim().toLowerCase().startsWith(xiv)) {
+                                run.xiVersion = l.trim().substring(xiv.length()).trim();
+                                versionSet = true;
+                            }
                         }
                     }
                 }
@@ -283,6 +287,14 @@ public class XiLauncher {
             } catch (SQLException ex1) {
                 Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE, null, ex1);
             }
+        } catch(Exception e) {
+            Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE, "Caught an Excption:", e);
+            try {
+                con.rollback();
+            } catch (SQLException ex1) {
+                Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE, null, ex1);
+            }
+            System.exit(-1);
         }
         return false;
         
@@ -434,7 +446,7 @@ public class XiLauncher {
             File ld = new File(args[1]);
             if (new File(args[1]).isDirectory()) {
                 logDir = ld.getAbsolutePath() + File.separator;
-                FileHandler fh = new FileHandler(logDir+File.separator+"XiLauncher.log");
+                FileHandler fh = new FileHandler(logDir+File.separator+"XiLauncher"+ManagementFactory.getRuntimeMXBean().getName().replaceAll("[^a-zA-Z0-9\\.\\-]", "_") +".log");
                 Logger.getGlobal().addHandler(fh);
                 Logger.getLogger("rappsilber").addHandler(fh);
             }

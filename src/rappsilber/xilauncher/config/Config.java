@@ -397,9 +397,11 @@ public class Config {
                         line = config.readLine();
                     } else if (line.trim().toLowerCase().contentEquals("[pause]")) {
                         pause = true;
+                        Logger.getLogger(this.getClass().getName()).log(Level.WARNING,"Config file contains [PAUSE]: pausing all threads");
                         line = config.readLine();
                     } else if (line.trim().toLowerCase().contentEquals("[stop]")) {
                         stop = true;
+                        Logger.getLogger(this.getClass().getName()).log(Level.WARNING,"Config file contains [STOP]: closing down launcher");
                         line = config.readLine();
                     } else if (line.trim().toLowerCase().contentEquals("[replacements]")) {
 //                            int sectionLine = ln;

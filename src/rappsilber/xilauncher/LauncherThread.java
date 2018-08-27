@@ -5,6 +5,8 @@
 package rappsilber.xilauncher;
 
 import java.io.FileNotFoundException;
+import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.SimpleDateFormat;
@@ -151,7 +153,26 @@ public class LauncherThread extends Thread{
                     launcher.launch();
                     if (plout != null)  {
                         sdate = logDate.format(c.getTime());
-                        plout.standardOutput("\n"+sdate+": finished Xi on database " + nextRun.connection + " starting serach " + nextRun.name + "(" + nextRun.search + ")\n");
+                        plout.standardOutput("\n"+sdate+": finished Xi on database " + nextRun.connection + " serach " + nextRun.name + "(" + nextRun.search + ")\n");
+                    }
+                    try {
+                        Logger.getLogger(LauncherThread.class.getName()).log(Level.INFO, "Setting is_executing to false");
+                        Connection con = nextRun.connection.getConnection();
+                        boolean prevAuto = con.getAutoCommit();
+                        con.setAutoCommit(false);
+                        ResultSet rs = con.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE, ResultSet.CLOSE_CURSORS_AT_COMMIT).executeQuery("SELECT status, is_executing, id FROM SEARCH WHERE ID = " + nextRun.search + " FOR UPDATE");
+                        if (rs.next()) {
+                            if (!rs.getString(1).contentEquals("completed")) {
+                                rs.updateString(1, "UNFINISHED:" + rs.getString(1));
+                                rs.updateBoolean(2, false);
+                                rs.updateRow();
+                            }
+                        }
+                        rs.close();
+                        con.commit();
+                        con.setAutoCommit(prevAuto);
+                    } catch (SQLException ex) {
+                        Logger.getLogger(LauncherThread.class.getName()).log(Level.SEVERE, null, ex);
                     }
 
                 }
