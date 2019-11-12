@@ -55,6 +55,7 @@ public class LauncherThread extends Thread{
             boolean enabled;
             String queuename;
             String priouser;
+            String lowPrioUser;
             conf.recoverServers();
             
             synchronized (queue) {
@@ -65,6 +66,7 @@ public class LauncherThread extends Thread{
                 prioritisedMaxPeakListSize = queue.prioritisedMaxPeakList;
                 maxPeakListSize = queue.maxPeakList;
                 priouser = queue.prioUser;
+                lowPrioUser = queue.lowPrioUser;
             }
             
             if (enabled) {
@@ -78,7 +80,7 @@ public class LauncherThread extends Thread{
                 if (smallSearchesRun <5) {
                     if (prioritisedMaxPeakListSize!= null && prioritisedMaxPeakListSize > 0) {
                         prioritisedMaxPeakListSize = Math.min(maxPeakListSize, prioritisedMaxPeakListSize);
-                        nextRun  = XiLauncher.getNextRun(maxSize, prioritisedMaxPeakListSize, conf,priouser);
+                        nextRun  = XiLauncher.getNextRun(maxSize, prioritisedMaxPeakListSize, conf,priouser, lowPrioUser);
                         if (nextRun != null) {
                             smallSearchesRun+=1;
                         }
@@ -89,9 +91,9 @@ public class LauncherThread extends Thread{
                 
                 if (nextRun == null) {
                     if (maxPeakListSize>0)
-                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser);
+                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser, lowPrioUser);
                     else
-                        nextRun = XiLauncher.getNextRun(maxSize, conf, priouser);
+                        nextRun = XiLauncher.getNextRun(maxSize, conf, priouser, lowPrioUser);
                 }
                 
                 boolean haveRun = false;

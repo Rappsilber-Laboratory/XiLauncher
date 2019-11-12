@@ -171,8 +171,8 @@ public class XiLauncher {
     
     private static HashMap<Config.DBConnection,LinkedList<Integer>>  usercount = new HashMap<Config.DBConnection, LinkedList<Integer>>();
 
-    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, String prioUser){
-        return getNextRun(maxFastaSize, 0, conf,prioUser);
+    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, String prioUser, String lowPrioUser){
+        return getNextRun(maxFastaSize, 0, conf,prioUser, lowPrioUser);
     }
     
     /**
@@ -301,7 +301,7 @@ public class XiLauncher {
     }
     
     
-    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, String prioUser){
+    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, String prioUser, String lowPrioUser){
         Calendar now = Calendar.getInstance();
         HashSet<String> cleanup = new HashSet<String>();
         for (String run : runs.keySet()) {
@@ -362,6 +362,15 @@ public class XiLauncher {
                     orderby.insert(8, " CASE WHEN uploadedby = (select id from users where user_name = '" + prioUser +"') THEN 0 ELSE 1 END, ");
                 }
             }
+            
+            if (lowPrioUser != null) {
+                if (lowPrioUser.matches("[0-9]+")) {
+                    orderby.insert(8, " CASE WHEN uploadedby = " + lowPrioUser +" THEN 1 ELSE 0 END, ");
+                } else {
+                    orderby.insert(8, " CASE WHEN uploadedby = (select id from users where user_name = '" + lowPrioUser +"') THEN 1 ELSE 0 END, ");
+                }
+            }
+            
             
             
             try {

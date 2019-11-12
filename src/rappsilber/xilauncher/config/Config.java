@@ -332,6 +332,7 @@ public class Config {
         public int prioritisedMaxPeakList = 0;
         public int maxPeakList = 0;
         public String prioUser = null;
+        public String lowPrioUser = null;
         public String[] Args = null;
         public boolean enabled = true;
         public boolean stop = false;
@@ -444,6 +445,8 @@ public class Config {
                                     q.name = sl[1];
                                 } else if (sl[0].trim().toLowerCase().contentEquals("priorityuser")) {
                                     q.prioUser = sl[1].trim();
+                                } else if (sl[0].trim().toLowerCase().contentEquals("lowpriorityuser")) {
+                                    q.lowPrioUser = sl[1].trim();
                                 } else if (sl[0].trim().toLowerCase().contentEquals("maxfastasize")) {
                                     String ssize = sl[1].trim().toUpperCase();
                                     q.maxFastaSize = parseSize(ssize);
@@ -676,6 +679,7 @@ public class Config {
                         qo.stop = q.stop;
                         qo.maxFastaSize = q.maxFastaSize;
                         qo.prioUser = q.prioUser;
+                        qo.lowPrioUser = q.lowPrioUser;
                         qo.prioritisedMaxPeakList = q.prioritisedMaxPeakList;
                         qo.maxPeakList = q.maxPeakList;
                     }
