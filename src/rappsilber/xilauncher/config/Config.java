@@ -4,6 +4,8 @@
  */
 package rappsilber.xilauncher.config;
 
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -21,9 +23,11 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
+import rappsilber.xilauncher.processes.ProcessLauncher;
 
 /**
  *
@@ -326,17 +330,86 @@ public class Config {
     }
 
     public class Queue {
-
+        ArrayList<ActionListener> listeners = new ArrayList<>();
+        /** name for the queue */
         public String name = null;
+        /** the largest fasta - that will be considered */
         public Integer maxFastaSize = null;
+        /** prioritise peak-list that are smaller then */
         public int prioritisedMaxPeakList = 0;
+        /** don't consider runs that have a combined peak-list larger then */
         public int maxPeakList = 0;
+        /** runs by these users will not be picked up by this queue */
+        public String excludedUser = null;
+        /** prioritised users */
         public String prioUser = null;
+        /** de-prioritised users */
         public String lowPrioUser = null;
+        /** array of arguments  */
         public String[] Args = null;
+        /** can this queue pick up new searches  */
         public boolean enabled = true;
+        /** */
+        private String searching = null;
+
+        /** can this queue pick up new searches  */
+        public AtomicBoolean paused = new AtomicBoolean(false);
+        /** Should this queue stop running */
         public boolean stop = false;
+        /** is the thread backing this queue currently active */
         public boolean started = false;
+        
+        /** the launcher representing the currently running process for this queue */
+        private ProcessLauncher launcher = null;
+        
+        /** if we have a gui active - this links to the gui element representing the current queue-entry */
+        QueueGUI gui = null;
+
+        /**
+         *
+         * @return the searching
+         */
+        public String getSearching() {
+            return searching;
+        }
+
+        
+        /**
+         *
+         * @param searching the searching to set
+         */
+        public void setSearching(String searching, ProcessLauncher Launcher) {
+            this.searching = searching;
+            this.launcher = launcher;
+            if (searching == null)
+                this.searching = "IDLE";
+            ActionEvent evt = new ActionEvent(this, 0, "Serach Set");
+            for (ActionListener al : this.listeners)
+                al.actionPerformed(evt);
+        }
+        
+        public void addActionListener(ActionListener al) {
+            this.listeners.add(al);
+        }
+
+        public void removeActionListener(ActionListener al) {
+            this.listeners.remove(al);
+        }
+
+        /**
+         * @return the launcher
+         */
+        public ProcessLauncher getLauncher() {
+            return launcher;
+        }
+
+        /**
+         * @param launcher the launcher to set
+         */
+        public void setLauncher(ProcessLauncher launcher) {
+            this.launcher = launcher;
+        }
+        
     }
 
 //    public int[] maxFastaSize;
@@ -358,6 +431,10 @@ public class Config {
     public long connectionRecoveryTryMili = 1000 * 60 * 30;
     
     public JarDefinition defaultJar = new JarDefinition(".", "XiSearch");
+    
+    public ConfigGUI gui  =null;
+    
+    AtomicBoolean paused = new AtomicBoolean(false);
 
 //    public Config() throws IOException {
 //        readDefaultConfig();
@@ -434,6 +511,7 @@ public class Config {
                     } else if (line.trim().toLowerCase().contentEquals("[queue]")) {
                         Queue q = new Queue();
                         confqueues.add(q);
+                        q.paused = paused;
                         int sectionLine = ln;
                         line = config.readLine();
                         ln++;
@@ -615,15 +693,11 @@ public class Config {
             }
 
             if (stop == true) {
-                for (Queue q : queues) {
-                    q.stop = true;
-                }
+                setStop();
             }
 
             if (pause == true) {
-                for (Queue q : queues) {
-                    q.enabled = false;
-                }
+                paused.set(true);
             }
 
 //            this.queus = XiArgs.length;
@@ -631,6 +705,13 @@ public class Config {
 
         Logger.getLogger(this.getClass().getName()).log(Level.INFO,"Queues:" + queues.length);
 
+    }
+
+    public void setStop() {
+        this.stop = true;
+        for (Queue q : queues) {
+            q.stop = true;
+        }
     }
 
     public int parseSize(String ssize) throws NumberFormatException {
@@ -666,6 +747,7 @@ public class Config {
     public void reReadConfig() throws FileNotFoundException, IOException {
         Config nc = new Config(configFile);
         this.configFileChangeTime = nc.configFileChangeTime;
+        this.paused.set(nc.paused.get());
         ArrayList<Queue> newThreads = new ArrayList<Queue>();
         ArrayList<Queue> foundThreads = new ArrayList<Queue>();
 
@@ -680,8 +762,12 @@ public class Config {
                         qo.maxFastaSize = q.maxFastaSize;
                         qo.prioUser = q.prioUser;
                         qo.lowPrioUser = q.lowPrioUser;
+                        qo.excludedUser = q.excludedUser;
                         qo.prioritisedMaxPeakList = q.prioritisedMaxPeakList;
                         qo.maxPeakList = q.maxPeakList;
+                    }
+                    if (qo.gui != null) {
+                        qo.gui.updateFromQueue();
                     }
                     qfound = true;
                     foundThreads.add(q);
@@ -689,6 +775,9 @@ public class Config {
             }
             if (!qfound) {
                 newThreads.add(q);
+                q.paused = this.paused;
+                if (this.gui != null)
+                    this.gui.addQueue(q);
             }
         }
 
@@ -702,6 +791,8 @@ public class Config {
             }
             if (!qfound) {
                 qo.stop = true;
+                if (this.gui != null)
+                    this.gui.removeQueue(qo);
             }
         }
 
@@ -714,6 +805,10 @@ public class Config {
         }
         this.server = nc.server;
         this.defaultJar = nc.defaultJar;
+        if (this.gui != null) {
+            gui.upadateFromConfig();
+        }
+
     }
 
     public void disableServer(DBConnection server) {

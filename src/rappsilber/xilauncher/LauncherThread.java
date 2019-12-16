@@ -56,17 +56,19 @@ public class LauncherThread extends Thread{
             String queuename;
             String priouser;
             String lowPrioUser;
+            String excludedUser;
             conf.recoverServers();
             
             synchronized (queue) {
                 defargs = queue.Args;
                 maxSize = queue.maxFastaSize;
-                enabled = queue.enabled;
+                enabled = queue.enabled && !queue.paused.get();
                 queuename = queue.name;
                 prioritisedMaxPeakListSize = queue.prioritisedMaxPeakList;
                 maxPeakListSize = queue.maxPeakList;
                 priouser = queue.prioUser;
                 lowPrioUser = queue.lowPrioUser;
+                excludedUser = queue.excludedUser;
             }
             
             if (enabled) {
@@ -80,7 +82,7 @@ public class LauncherThread extends Thread{
                 if (smallSearchesRun <5) {
                     if (prioritisedMaxPeakListSize!= null && prioritisedMaxPeakListSize > 0) {
                         prioritisedMaxPeakListSize = Math.min(maxPeakListSize, prioritisedMaxPeakListSize);
-                        nextRun  = XiLauncher.getNextRun(maxSize, prioritisedMaxPeakListSize, conf,priouser, lowPrioUser);
+                        nextRun  = XiLauncher.getNextRun(maxSize, prioritisedMaxPeakListSize, conf,priouser, lowPrioUser, excludedUser);
                         if (nextRun != null) {
                             smallSearchesRun+=1;
                         }
@@ -91,9 +93,9 @@ public class LauncherThread extends Thread{
                 
                 if (nextRun == null) {
                     if (maxPeakListSize>0)
-                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser, lowPrioUser);
+                        nextRun  = XiLauncher.getNextRun(maxSize, maxPeakListSize, conf,priouser, lowPrioUser, excludedUser);
                     else
-                        nextRun = XiLauncher.getNextRun(maxSize, conf, priouser, lowPrioUser);
+                        nextRun = XiLauncher.getNextRun(maxSize, conf, priouser, lowPrioUser, excludedUser);
                 }
                 
                 boolean haveRun = false;
@@ -152,7 +154,14 @@ public class LauncherThread extends Thread{
                     } catch (FileNotFoundException ex) {
                         Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE, null, ex);
                     }
+                    synchronized (queue) {
+                        queue.setSearching("ID : " + nextRun.search + " NAME:" + nextRun.name, launcher);
+                    }
                     launcher.launch();
+                    synchronized(queue) {
+                        queue.setSearching(null, null);
+                    }
+                    
                     if (plout != null)  {
                         sdate = logDate.format(c.getTime());
                         plout.standardOutput("\n"+sdate+": finished Xi on database " + nextRun.connection + " serach " + nextRun.name + "(" + nextRun.search + ")\n");

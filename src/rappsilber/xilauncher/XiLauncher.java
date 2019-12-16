@@ -20,8 +20,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import rappsilber.utils.RArrayUtils;
 import rappsilber.utils.UpdateableInteger;
 import rappsilber.xilauncher.config.Config;
+import rappsilber.xilauncher.config.ConfigGUI;
 import rappsilber.xilauncher.log.OutputSplitter;
 
 /**
@@ -171,8 +173,8 @@ public class XiLauncher {
     
     private static HashMap<Config.DBConnection,LinkedList<Integer>>  usercount = new HashMap<Config.DBConnection, LinkedList<Integer>>();
 
-    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, String prioUser, String lowPrioUser){
-        return getNextRun(maxFastaSize, 0, conf,prioUser, lowPrioUser);
+    public static synchronized XiSearch getNextRun(int maxFastaSize, Config conf, String prioUser, String lowPrioUser, String excludedUser){
+        return getNextRun(maxFastaSize, 0, conf,prioUser, lowPrioUser, excludedUser);
     }
     
     /**
@@ -301,9 +303,15 @@ public class XiLauncher {
     }
     
     
-    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, String prioUser, String lowPrioUser){
+    public static synchronized XiSearch getNextRun(int maxFastaSize, int maxPeakListSize, Config conf, String prioUser, String lowPrioUser, String excludedUser){
         Calendar now = Calendar.getInstance();
         HashSet<String> cleanup = new HashSet<String>();
+        String where = "";
+        if  (excludedUser != null && !excludedUser.trim().isEmpty()) {
+            String[] eu = excludedUser.split("\\s*,\\s*");
+            where += " AND uploadedby not in (select id from users where user_name in ('" + RArrayUtils.toString(eu, "' , '") +"'))";
+        }
+        
         for (String run : runs.keySet()) {
             if (now.getTimeInMillis() - runs.get(run).getTimeInMillis() > 60*1000) {
                 cleanup.add(run);
@@ -328,19 +336,22 @@ public class XiLauncher {
             }
 
             // prevent a single user to block all queues indefinetly we count how much we searched for him/her
-            LinkedList<Integer> dbUserCount = usercount.get(db);
-            if (dbUserCount == null) {
-                dbUserCount = new LinkedList<Integer>();
-                usercount.put(db, dbUserCount);
-            }
             HashMap<Integer,UpdateableInteger> counts = new HashMap<Integer, UpdateableInteger>();
-            for (Integer u : dbUserCount) {
-                UpdateableInteger i = counts.get(u);
-                if (i == null) {
-                    i= new UpdateableInteger(1);
-                    counts.put(u, i);
-                } else {
-                    i.value++;
+            LinkedList<Integer> dbUserCount;
+            synchronized(usercount) {
+                dbUserCount = usercount.get(db);
+                if (dbUserCount == null) {
+                    dbUserCount = new LinkedList<Integer>();
+                    usercount.put(db, dbUserCount);
+                }
+                for (Integer u : dbUserCount) {
+                    UpdateableInteger i = counts.get(u);
+                    if (i == null) {
+                        i= new UpdateableInteger(1);
+                        counts.put(u, i);
+                    } else {
+                        i.value++;
+                    }
                 }
             }
             StringBuilder orderby = new StringBuilder();
@@ -356,26 +367,29 @@ public class XiLauncher {
                 orderby.append("ORDER BY ID");
             }
             if (prioUser != null) {
-                if (prioUser.matches("[0-9]+")) {
-                    orderby.insert(8, " CASE WHEN uploadedby = " + prioUser +" THEN 0 ELSE 1 END, ");
+
+                String[] pu = prioUser.split("\\s*,\\s*");
+                if (prioUser.matches("[0-9,\\s]+")) {
+                    orderby.insert(8, " CASE WHEN uploadedby in  (" + RArrayUtils.toString(pu, " , ") +") THEN 0 ELSE 1 END, ");
                 } else {
-                    orderby.insert(8, " CASE WHEN uploadedby = (select id from users where user_name = '" + prioUser +"') THEN 0 ELSE 1 END, ");
+                    orderby.insert(8, " CASE WHEN uploadedby in (select id from users where user_name in ('" + RArrayUtils.toString(pu, "' , '") +"')) THEN 0 ELSE 1 END, ");
                 }
             }
             
             if (lowPrioUser != null) {
+                String[] lpu = lowPrioUser.split("\\s*,\\s*");
                 if (lowPrioUser.matches("[0-9]+")) {
-                    orderby.insert(8, " CASE WHEN uploadedby = " + lowPrioUser +" THEN 1 ELSE 0 END, ");
+                    orderby.insert(8, " CASE WHEN uploadedby = (" + RArrayUtils.toString(lpu, " , ") +") THEN 1 ELSE 0 END, ");
                 } else {
-                    orderby.insert(8, " CASE WHEN uploadedby = (select id from users where user_name = '" + lowPrioUser +"') THEN 1 ELSE 0 END, ");
+                    orderby.insert(8, " CASE WHEN uploadedby = (select id from users where user_name in ('" + RArrayUtils.toString(lpu, "' , '") +"')) THEN 1 ELSE 0 END, ");
                 }
             }
             
             
             
             try {
-                if (con != null) {
-                    ResultSet rs = con.createStatement().executeQuery("SELECT id, name, uploadedby FROM search WHERE status='queuing' and is_executing = 'false' and (hidden is null OR hidden = false) " + orderby + ";");
+                if (con != null) {                    
+                    ResultSet rs = con.createStatement().executeQuery("SELECT id, name, uploadedby FROM search WHERE status='queuing' and is_executing = 'false' and (hidden is null OR hidden = false) " + where + orderby + ";");
                     while (rs.next()) {
                         int searchid = rs.getInt(1);
                         String basepath = db.getBasePath();
@@ -391,10 +405,12 @@ public class XiLauncher {
                             if (!runs.containsKey(run)) {
                                 runs.put(run, Calendar.getInstance());
                                 // add the uploader to the list
-                                dbUserCount.add(rs.getInt(3));
-                                // delete first entry
-                                while (dbUserCount.size() > 20) {
-                                    dbUserCount.remove(0);
+                                synchronized(usercount) {
+                                    dbUserCount.add(rs.getInt(3));
+                                    // delete first entry
+                                    while (dbUserCount.size() > 20) {
+                                        dbUserCount.remove(0);
+                                    }
                                 }
 
                                 return ret;
@@ -439,8 +455,21 @@ public class XiLauncher {
     public static void main(String[] args) throws IOException {
         Config conf = null;
         String logDir = "";
-        if (args.length > 0) {
-            conf = new Config(args[0]);
+        String confFile = null;
+        boolean gui = false; 
+        for (String a :args) {
+            if (a.contentEquals("--gui"))
+                gui = true;
+            else if (confFile == null)
+                confFile = a;
+            else 
+                logDir = a;
+        }
+        
+        if (confFile != null) {
+            conf = new Config(confFile);
+            if (gui)
+                ConfigGUI.startGui(conf);
         } else {
             Logger.getLogger(XiLauncher.class.getName()).log(Level.SEVERE,"No configuration given");
             System.exit(-1);
@@ -451,9 +480,9 @@ public class XiLauncher {
 
         stop = conf.stop;
         
-        if (args.length > 1) {
-            File ld = new File(args[1]);
-            if (new File(args[1]).isDirectory()) {
+        if (logDir != null) {
+            File ld = new File(logDir);
+            if (new File(logDir).isDirectory()) {
                 logDir = ld.getAbsolutePath() + File.separator;
                 FileHandler fh = new FileHandler(logDir+File.separator+"XiLauncher"+ManagementFactory.getRuntimeMXBean().getName().replaceAll("[^a-zA-Z0-9\\.\\-]", "_") +".log");
                 Logger.getGlobal().addHandler(fh);
@@ -467,7 +496,7 @@ public class XiLauncher {
         
         threads = startThreads(conf, logDir);
         
-        while (!waitForThreads(threads, 3000)) {
+        while (!waitForThreads(threads, 1000)) {
             
             if (conf.configChanged()) {
                 stop = true;
@@ -500,6 +529,10 @@ public class XiLauncher {
                 }
             }
             
+        }
+        if (conf.gui != null) {
+            conf.gui.setVisible(false);
+            conf.gui.dispose();
         }
 
         
