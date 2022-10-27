@@ -71,7 +71,28 @@ public class Config {
             File f = new File(concPath);
             if (f.exists()) {
                 return f.getAbsolutePath();
+                 
+            } else if (System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("TRUE")) {
+                System.out.println(f + " not found - try next");
             }
+            if (!concPath.startsWith(File.separator)) {
+                f = new File(File.separator+concPath);
+                if (f.exists()) {
+                    return f.getAbsolutePath();
+                } else if (System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("TRUE")) {
+                    System.out.println(f + " not found - try next");
+                }
+
+            }
+
+            concPath = path + File.separator + baseName +"_" + (Version == null ? "":Version) + extension;
+            f = new File(concPath);
+            if (f.exists()) {
+                return f.getAbsolutePath();
+            } else if (System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("TRUE")) {
+                System.out.println(f + " not found - try next");
+            }
+
             if (!concPath.startsWith(File.separator)) {
                 f = new File(File.separator+concPath);
                 if (f.exists()) {
@@ -79,16 +100,8 @@ public class Config {
                 }
             }
 
-            concPath = path + File.separator + baseName +"_" + (Version == null ? "":Version) + extension;
-            f = new File(concPath);
-            if (f.exists()) {
-                return f.getAbsolutePath();
-            }
-            if (!concPath.startsWith(File.separator)) {
-                f = new File(File.separator+concPath);
-                if (f.exists()) {
-                    return f.getAbsolutePath();
-                }
+            if (System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("TRUE")) {
+                System.out.println(f + " not found");
             }
 
             return null;
@@ -218,7 +231,7 @@ public class Config {
                     con = DriverManager.getConnection(conString, user, password);
                     connection_opened = true;
                 } catch (ClassNotFoundException ex) {
-                    Logger.getLogger(this.getClass().getName()).log(Level.SEVERE, null, ex);
+                    Logger.getLogger(this.getClass().getName()).log(Level.SEVERE, conString, ex);
                     throw new SQLException(ex);
                 }
 

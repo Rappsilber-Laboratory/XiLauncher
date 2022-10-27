@@ -106,8 +106,16 @@ public class LauncherThread extends Thread{
                 
                 if (haveRun) {
                     // we have the run and canstart xi now
-                    if (System.getProperty("TRYRUN","FALSE").contentEquals("TRUE"))
+                    if (System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("TRUE")) {
+                        try {
+                            // it'S a try run - so just reset the satus to queuing
+                            Statement st = nextRun.connection.getConnection().createStatement();
+                            st.execute("UPDATE search SET status = 'queuing' WHERE  id = " + nextRun.search +";");
+                        } catch (SQLException ex) {
+                            Logger.getLogger(LauncherThread.class.getName()).log(Level.SEVERE, null, ex);
+                        }
                         continue;
+                    }
                     
                     Config.JarDefinition j = conf.defaultJar;
                     if (nextRun.xiVersion != null && !nextRun.xiVersion.isEmpty()) {
@@ -115,10 +123,12 @@ public class LauncherThread extends Thread{
                         if (j.getFile() == null) {
                             try {
                                 Logger.getLogger(this.getClass().getName()).log(Level.WARNING,"XiLauncher: Requested Xi version ("+ nextRun.xiVersion+") not found for search " + nextRun.search +"");
-                                Statement st = nextRun.connection.getConnection().createStatement();
-                                st.execute("UPDATE search SET status = 'XiLauncher: Requested Xi version("+ nextRun.xiVersion +") not found' WHERE  id = " + nextRun.search +";");
-                                st.close();
-                                nextRun.connection.getConnection().commit();
+                                if (!System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("FALSE")) {
+                                    Statement st = nextRun.connection.getConnection().createStatement();
+                                    st.execute("UPDATE search SET status = 'XiLauncher: Requested Xi version("+ nextRun.xiVersion +") not found' WHERE  id = " + nextRun.search +";");
+                                    st.close();
+                                    nextRun.connection.getConnection().commit();
+                                }
                                 continue;
                             } catch (SQLException ex) {
                                 Logger.getLogger(LauncherThread.class.getName()).log(Level.SEVERE, null, ex);
@@ -157,7 +167,16 @@ public class LauncherThread extends Thread{
                     synchronized (queue) {
                         queue.setSearching("ID : " + nextRun.search + " NAME:" + nextRun.name, launcher);
                     }
-                    launcher.launch();
+                    if (!System.getProperty("TRYRUN","FALSE").toUpperCase().contentEquals("FALSE")) {
+                        launcher.launch();
+                    } else {
+                        try {
+                            Thread.currentThread().sleep(5l);
+                        } catch (InterruptedException ex) {
+                            Logger.getLogger(LauncherThread.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                    }
+                    
                     synchronized(queue) {
                         queue.setSearching(null, null);
                     }

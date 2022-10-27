@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -24,7 +23,6 @@ import rappsilber.utils.RArrayUtils;
 import rappsilber.utils.UpdateableInteger;
 import rappsilber.xilauncher.config.Config;
 import rappsilber.xilauncher.config.ConfigGUI;
-import rappsilber.xilauncher.log.OutputSplitter;
 
 /**
  *
