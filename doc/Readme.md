@@ -2,6 +2,11 @@
 
 xiLauncher is intended to run xiSEARCH for searches defined in a database
 
+**Download**
+
+The latest binary can be downloaded from
+
+https://github.com/Rappsilber-Laboratory/XiLauncher/releases
 
 **START**
 
