@@ -137,7 +137,19 @@ _CONNECTION_ the connection string to be used
 _USER_ the databse user name to be used
 _PASSWORD_ the database password to be used
 
+xiSEARCH takes the information of where to find the files to be searched from the database via
 
+select setting from base_setting where name like base_directory_path
+
+But the (base) path can be overwriten on the commandline with -DXI_EXTRA_CONFIG=[new base path] as part of the xiSEARCH setting. E.g.:
+
+	[REPLACEMENTS]
+	BASEPATH=/media/user/strage/xi_data
+	
+	[QUEUE]
+	QUEUE=foo
+	ARGUMENTS=%java% -Xmx10G -Xms1G -DXI_EXTRA_CONFIG=base_directory_path:%BASEPATH%  -DXI_DB_USER=%DBUSER% -DXI_DB_PASSWD=%DBPASS%  -DXI_SHOW_DEBUG=1 -DXI_EXTRA_CONFIG=UseCPUs:%LOW_CPU% -DXI_DB_CONNECTION=%DB%  -cp %classpath% -DXI_CSV_OUTPUT=/tmp/xi_csv_ouput_small.csv rappsilber.applications.XiDB
+	enabled=true
 
 **Service File**
 
